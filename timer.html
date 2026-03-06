@@ -359,7 +359,7 @@
             <div id="progress-bar-wrap">
                 <div id="progress-bar"></div>
             </div>
-            <div id="direction-badge" id="dir-label"></div>
+            <div id="direction-badge"></div>
             <div id="controls">
                 <button class="btn" id="btn-start">Start</button>
                 <button class="btn secondary" id="btn-reset">Reset</button>
@@ -377,6 +377,7 @@
 
                 // ─── State ────────────────────────────────────────────────────────────────
                 let phase = 'idle';   // 'idle' | 'countdown' | 'running' | 'done'
+                let paused = false;
                 let elapsed = 0;        // ms
                 let cdElapsed = 0;        // ms for countdown phase
                 let lastTick = null;
@@ -411,31 +412,30 @@
 
                 function setPhaseClass(el, p) {
                     el.classList.remove('countdown-phase', 'running-phase', 'done-phase');
-                    if (p === 'countdown') el.classList.add('countdown-phase');
-                    if (p === 'running') el.classList.add('running-phase');
-                    if (p === 'done') el.classList.add('done-phase');
+                    if (p) el.classList.add(`${p}-phase`);
+                }
+
+                function setAllPhaseClasses(p) {
+                    setPhaseClass(display, p);
+                    setPhaseClass(label, p);
+                    setPhaseClass(progressBar, p);
                 }
 
                 function render() {
                     if (phase === 'idle') {
-                        const initSecs = direction === 'down' ? duration : 0;
-                        display.textContent = fmt(initSecs);
+                        display.textContent = fmt(direction === 'down' ? duration : 0);
                         label.textContent = 'Ready';
                         progressBar.style.width = direction === 'down' ? '100%' : '0%';
                         progressBar.style.background = '';
-                        setPhaseClass(display, '');
-                        setPhaseClass(label, '');
-                        setPhaseClass(progressBar, '');
+                        setAllPhaseClasses('');
                         btnStart.textContent = 'Start';
                     } else if (phase === 'countdown') {
                         const remaining = Math.max(0, (autostart * 1000 - cdElapsed) / 1000);
                         display.textContent = fmt(remaining);
                         label.textContent = 'Starting in';
                         progressBar.style.width = ((autostart * 1000 - cdElapsed) / (autostart * 1000) * 100).toFixed(2) + '%';
-                        setPhaseClass(display, 'countdown');
-                        setPhaseClass(label, 'countdown');
-                        setPhaseClass(progressBar, 'countdown');
-                        btnStart.textContent = 'Pause';
+                        setAllPhaseClasses('countdown');
+                        btnStart.textContent = paused ? 'Resume' : 'Pause';
                     } else if (phase === 'running') {
                         const elapsedSecs = elapsed / 1000;
                         const timerDisplay = direction === 'down'
@@ -445,10 +445,8 @@
                         label.textContent = direction === 'up' ? 'Elapsed' : 'Remaining';
                         const pct = Math.min(100, (elapsed / (duration * 1000)) * 100);
                         progressBar.style.width = (direction === 'down' ? 100 - pct : pct).toFixed(2) + '%';
-                        setPhaseClass(display, 'running');
-                        setPhaseClass(label, 'running');
-                        setPhaseClass(progressBar, 'running');
-                        btnStart.textContent = 'Pause';
+                        setAllPhaseClasses('running');
+                        btnStart.textContent = paused ? 'Resume' : 'Pause';
                     } else if (phase === 'done') {
                         display.textContent = direction === 'down' ? fmt(0) : fmt(duration);
                         label.textContent = 'Done';
@@ -502,27 +500,24 @@
                 // ─── Controls ─────────────────────────────────────────────────────────────
                 btnStart.addEventListener('click', () => {
                     if (phase === 'idle' || phase === 'done') {
-                        elapsed = 0; cdElapsed = 0;
+                        elapsed = 0; cdElapsed = 0; paused = false;
                         phase = autostart > 0 ? 'countdown' : 'running';
                         startLoop();
-                    } else if (phase === 'countdown' || phase === 'running') {
+                    } else if (!paused && (phase === 'countdown' || phase === 'running')) {
                         // Pause
                         stopLoop();
-                        phase = phase === 'countdown' ? '_paused_cd' : '_paused_run';
-                        btnStart.textContent = 'Resume';
+                        paused = true;
                         render();
-                    } else if (phase === '_paused_cd') {
-                        phase = 'countdown';
-                        startLoop();
-                    } else if (phase === '_paused_run') {
-                        phase = 'running';
+                    } else if (paused) {
+                        // Resume
+                        paused = false;
                         startLoop();
                     }
                 });
 
                 btnReset.addEventListener('click', () => {
                     stopLoop();
-                    phase = 'idle'; elapsed = 0; cdElapsed = 0;
+                    phase = 'idle'; elapsed = 0; cdElapsed = 0; paused = false;
                     render();
                 });
 
@@ -582,29 +577,37 @@
 
                     // Reset timer to idle with new values
                     stopLoop();
-                    phase = 'idle'; elapsed = 0; cdElapsed = 0;
-                    dirBadge.textContent = direction === 'up' ? '▲  count up' : '▼  count down';
+                    phase = 'idle'; elapsed = 0; cdElapsed = 0; paused = false;
                     closeModal();
                     render();
                 });
 
                 // ─── Per-key input validation ─────────────────────────────────────────────
+                const NAV_KEYS = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'];
+
+                // Returns true (and handles the event) when a key is a shared control key.
+                // Returns false when the caller should continue with its own validation.
+                function handleModalKey(e) {
+                    if (e.key === 'Enter') { btnModalSave.click(); return true; }
+                    if (e.key === 'Escape') { closeModal(); return true; }
+                    if (e.metaKey || e.ctrlKey) return true;
+                    if (NAV_KEYS.includes(e.key)) return true;
+                    return false;
+                }
+
+                // Helper: simulate the resulting value after inserting e.key at the cursor.
+                function previewValue(e) {
+                    const el = e.target;
+                    return el.value.slice(0, el.selectionStart) + e.key + el.value.slice(el.selectionEnd);
+                }
+
                 // Duration: digits and colons only, at most two colons, each segment ≤ 2 digits
                 inputDuration.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') { btnModalSave.click(); return; }
-                    if (e.key === 'Escape') { closeModal(); return; }
-                    // Always allow control / navigation keys
-                    if (e.metaKey || e.ctrlKey) return;
-                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'].includes(e.key)) return;
+                    if (handleModalKey(e)) return;
 
-                    const allowed = /^[0-9:]$/;
-                    if (!allowed.test(e.key)) { e.preventDefault(); return; }
+                    if (!/^[0-9:]$/.test(e.key)) { e.preventDefault(); return; }
 
-                    // Simulate what the value will look like after the key is inserted
-                    const el = e.target;
-                    const before = el.value.slice(0, el.selectionStart);
-                    const after  = el.value.slice(el.selectionEnd);
-                    const next   = before + e.key + after;
+                    const next = previewValue(e);
 
                     // At most two colons (HH:MM:SS)
                     if ((next.match(/:/g) || []).length > 2) { e.preventDefault(); return; }
@@ -613,25 +616,17 @@
                     if (/::/.test(next) || next.startsWith(':')) { e.preventDefault(); return; }
 
                     // Each colon-separated segment must be at most 2 digits
-                    const segments = next.split(':');
-                    if (segments.some(s => s.length > 2)) { e.preventDefault(); return; }
+                    if (next.split(':').some(s => s.length > 2)) { e.preventDefault(); return; }
                 });
 
-                // Autostart: non-negative integers only
+                // Autostart: non-negative integers only, no leading zeros
                 inputAutostart.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') { btnModalSave.click(); return; }
-                    if (e.key === 'Escape') { closeModal(); return; }
-                    if (e.metaKey || e.ctrlKey) return;
-                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'].includes(e.key)) return;
+                    if (handleModalKey(e)) return;
 
                     if (!/^[0-9]$/.test(e.key)) { e.preventDefault(); return; }
 
                     // Disallow a leading zero followed by more digits (e.g. "07")
-                    const el = e.target;
-                    const before = el.value.slice(0, el.selectionStart);
-                    const after  = el.value.slice(el.selectionEnd);
-                    const next   = before + e.key + after;
-                    if (/^0\d/.test(next)) { e.preventDefault(); return; }
+                    if (/^0\d/.test(previewValue(e))) { e.preventDefault(); return; }
                 });
 
                 // ─── Autostart ────────────────────────────────────────────────────────────
