@@ -79,10 +79,10 @@
             #label {
                 font-family: 'Rajdhani', sans-serif;
                 font-weight: 300;
-                font-size: 11px;
+                font-size: 13px;
                 letter-spacing: 4px;
                 text-transform: uppercase;
-                color: var(--muted);
+                color: #b0b0d0;
                 margin-bottom: 20px;
                 transition: color 0.4s;
             }
@@ -156,9 +156,9 @@
             }
 
             #direction-badge {
-                font-size: 10px;
+                font-size: 12px;
                 letter-spacing: 3px;
-                color: var(--muted);
+                color: #b0b0d0;
                 text-transform: uppercase;
                 margin-bottom: 24px;
             }
@@ -214,10 +214,144 @@
                 border-radius: 4px;
                 z-index: 10;
             }
+
+            /* Edit modal */
+            #edit-modal-backdrop {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.72);
+                align-items: center;
+                justify-content: center;
+                z-index: 100;
+            }
+
+            #edit-modal-backdrop.open {
+                display: flex;
+            }
+
+            #edit-modal {
+                position: relative;
+                background: var(--panel);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 32px 28px 24px;
+                width: 300px;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+
+            #edit-modal::before,
+            #edit-modal::after {
+                content: '';
+                position: absolute;
+                width: 12px;
+                height: 12px;
+                border-color: var(--accent);
+                border-style: solid;
+            }
+
+            #edit-modal::before {
+                top: -1px;
+                left: -1px;
+                border-width: 2px 0 0 2px;
+            }
+
+            #edit-modal::after {
+                bottom: -1px;
+                right: -1px;
+                border-width: 0 2px 2px 0;
+            }
+
+            #edit-modal h2 {
+                font-family: 'Rajdhani', sans-serif;
+                font-weight: 300;
+                font-size: 13px;
+                letter-spacing: 4px;
+                text-transform: uppercase;
+                color: #b0b0d0;
+                margin: 0;
+            }
+
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .field label {
+                font-family: 'Rajdhani', sans-serif;
+                font-size: 13px;
+                letter-spacing: 3px;
+                text-transform: uppercase;
+                color: #b0b0d0;
+            }
+
+            .field input {
+                font-family: 'Share Tech Mono', monospace;
+                font-size: 22px;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 2px;
+                color: var(--text);
+                padding: 8px 12px;
+                outline: none;
+                width: 100%;
+                transition: border-color 0.2s, box-shadow 0.2s;
+            }
+
+            .field input:focus {
+                border-color: var(--accent);
+                box-shadow: var(--glow);
+            }
+
+            .field .hint {
+                font-size: 11px;
+                letter-spacing: 1px;
+                color: #b0b0d0;
+                opacity: 0.8;
+            }
+
+            .modal-row {
+                display: flex;
+                gap: 10px;
+                justify-content: flex-end;
+            }
+
+            .field-row {
+                display: flex;
+                gap: 12px;
+            }
+
+            .field-row .field {
+                flex: 1;
+            }
         </style>
     </head>
 
     <body>
+        <!-- Edit modal -->
+        <div id="edit-modal-backdrop">
+            <div id="edit-modal">
+                <h2>Timer Settings</h2>
+                <div class="field">
+                    <label>Duration</label>
+                    <input type="text" id="input-duration" placeholder="MM:SS or seconds" autocomplete="off" spellcheck="false">
+                    <span class="hint">e.g. 5:00 &nbsp;or&nbsp; 300</span>
+                </div>
+                <div class="field">
+                    <label>Autostart countdown</label>
+                    <input type="text" id="input-autostart" placeholder="seconds  (0 = off)" autocomplete="off" spellcheck="false">
+                    <span class="hint">Seconds before timer starts automatically. 0 = off</span>
+                </div>
+                <div class="modal-row">
+                    <button class="btn secondary" id="btn-modal-cancel">Cancel</button>
+                    <button class="btn" id="btn-modal-save">Apply</button>
+                </div>
+            </div>
+        </div>
+
         <div id="timer-shell">
             <div class="scanlines"></div>
             <div id="label">Initializing</div>
@@ -229,6 +363,7 @@
             <div id="controls">
                 <button class="btn" id="btn-start">Start</button>
                 <button class="btn secondary" id="btn-reset">Reset</button>
+                <button class="btn secondary" id="btn-edit">Edit</button>
             </div>
         </div>
 
@@ -237,8 +372,8 @@
                 // ─── Read URL params ───────────────────────────────────────────────────────
                 const params = new URLSearchParams(window.location.search);
                 const direction = (params.get('direction') || 'down').toLowerCase(); // 'up' | 'down'
-                const duration = Math.max(1, parseInt(params.get('duration') || '60', 10)); // seconds
-                const autostart = parseInt(params.get('autostart') || '0', 10);              // seconds; 0 = off
+                let duration = Math.max(1, parseInt(params.get('duration') || '60', 10)); // seconds
+                let autostart = parseInt(params.get('autostart') || '0', 10);              // seconds; 0 = off
 
                 // ─── State ────────────────────────────────────────────────────────────────
                 let phase = 'idle';   // 'idle' | 'countdown' | 'running' | 'done'
@@ -254,6 +389,12 @@
                 const dirBadge = document.getElementById('direction-badge');
                 const btnStart = document.getElementById('btn-start');
                 const btnReset = document.getElementById('btn-reset');
+                const btnEdit = document.getElementById('btn-edit');
+                const modalBackdrop = document.getElementById('edit-modal-backdrop');
+                const inputDuration = document.getElementById('input-duration');
+                const inputAutostart = document.getElementById('input-autostart');
+                const btnModalCancel = document.getElementById('btn-modal-cancel');
+                const btnModalSave = document.getElementById('btn-modal-save');
 
                 dirBadge.textContent = direction === 'up' ? '▲  count up' : '▼  count down';
 
@@ -383,6 +524,114 @@
                     stopLoop();
                     phase = 'idle'; elapsed = 0; cdElapsed = 0;
                     render();
+                });
+
+                // ─── Edit modal ───────────────────────────────────────────────────────────
+                function parseDurationInput(val) {
+                    val = val.trim();
+                    // Accept MM:SS or HH:MM:SS
+                    const colonMatch = val.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
+                    if (colonMatch) {
+                        const a = parseInt(colonMatch[1], 10);
+                        const b = parseInt(colonMatch[2], 10);
+                        const c = colonMatch[3] !== undefined ? parseInt(colonMatch[3], 10) : null;
+                        if (c !== null) return a * 3600 + b * 60 + c; // HH:MM:SS
+                        return a * 60 + b;                             // MM:SS
+                    }
+                    const n = parseInt(val, 10);
+                    return isNaN(n) ? null : n;
+                }
+
+                btnEdit.addEventListener('click', () => {
+                    inputDuration.value = fmt(duration);
+                    inputAutostart.value = autostart > 0 ? String(autostart) : '0';
+                    modalBackdrop.classList.add('open');
+                    inputDuration.focus();
+                    inputDuration.select();
+                });
+
+                function closeModal() {
+                    modalBackdrop.classList.remove('open');
+                }
+
+                btnModalCancel.addEventListener('click', closeModal);
+
+                modalBackdrop.addEventListener('click', (e) => {
+                    if (e.target === modalBackdrop) closeModal();
+                });
+
+                btnModalSave.addEventListener('click', () => {
+                    const newDuration = parseDurationInput(inputDuration.value);
+                    const newAutostart = parseInt(inputAutostart.value.trim(), 10);
+
+                    if (newDuration === null || newDuration < 1) {
+                        inputDuration.style.borderColor = 'var(--accent2)';
+                        inputDuration.focus();
+                        return;
+                    }
+                    inputDuration.style.borderColor = '';
+
+                    duration = newDuration;
+                    autostart = isNaN(newAutostart) || newAutostart < 0 ? 0 : newAutostart;
+
+                    // Reflect in URL without reloading
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('duration', duration);
+                    url.searchParams.set('autostart', autostart);
+                    window.history.replaceState(null, '', url.toString());
+
+                    // Reset timer to idle with new values
+                    stopLoop();
+                    phase = 'idle'; elapsed = 0; cdElapsed = 0;
+                    dirBadge.textContent = direction === 'up' ? '▲  count up' : '▼  count down';
+                    closeModal();
+                    render();
+                });
+
+                // ─── Per-key input validation ─────────────────────────────────────────────
+                // Duration: digits and colons only, at most two colons, each segment ≤ 2 digits
+                inputDuration.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { btnModalSave.click(); return; }
+                    if (e.key === 'Escape') { closeModal(); return; }
+                    // Always allow control / navigation keys
+                    if (e.metaKey || e.ctrlKey) return;
+                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'].includes(e.key)) return;
+
+                    const allowed = /^[0-9:]$/;
+                    if (!allowed.test(e.key)) { e.preventDefault(); return; }
+
+                    // Simulate what the value will look like after the key is inserted
+                    const el = e.target;
+                    const before = el.value.slice(0, el.selectionStart);
+                    const after  = el.value.slice(el.selectionEnd);
+                    const next   = before + e.key + after;
+
+                    // At most two colons (HH:MM:SS)
+                    if ((next.match(/:/g) || []).length > 2) { e.preventDefault(); return; }
+
+                    // No consecutive colons, no leading colon
+                    if (/::/.test(next) || next.startsWith(':')) { e.preventDefault(); return; }
+
+                    // Each colon-separated segment must be at most 2 digits
+                    const segments = next.split(':');
+                    if (segments.some(s => s.length > 2)) { e.preventDefault(); return; }
+                });
+
+                // Autostart: non-negative integers only
+                inputAutostart.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') { btnModalSave.click(); return; }
+                    if (e.key === 'Escape') { closeModal(); return; }
+                    if (e.metaKey || e.ctrlKey) return;
+                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'].includes(e.key)) return;
+
+                    if (!/^[0-9]$/.test(e.key)) { e.preventDefault(); return; }
+
+                    // Disallow a leading zero followed by more digits (e.g. "07")
+                    const el = e.target;
+                    const before = el.value.slice(0, el.selectionStart);
+                    const after  = el.value.slice(el.selectionEnd);
+                    const next   = before + e.key + after;
+                    if (/^0\d/.test(next)) { e.preventDefault(); return; }
                 });
 
                 // ─── Autostart ────────────────────────────────────────────────────────────
