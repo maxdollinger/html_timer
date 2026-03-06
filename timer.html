@@ -333,12 +333,14 @@
                 <h2>Timer Settings</h2>
                 <div class="field">
                     <label>Duration</label>
-                    <input type="text" id="input-duration" placeholder="MM:SS or seconds" autocomplete="off" spellcheck="false">
+                    <input type="text" id="input-duration" placeholder="MM:SS or seconds" autocomplete="off"
+                        spellcheck="false">
                     <span class="hint">e.g. 5:00 &nbsp;or&nbsp; 300</span>
                 </div>
                 <div class="field">
                     <label>Autostart countdown</label>
-                    <input type="text" id="input-autostart" placeholder="seconds  (0 = off)" autocomplete="off" spellcheck="false">
+                    <input type="text" id="input-autostart" placeholder="seconds  (0 = off)" autocomplete="off"
+                        spellcheck="false">
                     <span class="hint">Seconds before timer starts automatically. 0 = off</span>
                 </div>
                 <div class="modal-row">
@@ -370,6 +372,7 @@
                 const direction = (params.get('direction') || 'down').toLowerCase(); // 'up' | 'down'
                 let duration = Math.max(1, parseInt(params.get('duration') || '60', 10)); // seconds
                 let autostart = parseInt(params.get('autostart') || '0', 10);              // seconds; 0 = off
+                let soundEnabled = params.get('sound') !== '0';                            // true by default; ?sound=0 disables
 
                 // ─── State ────────────────────────────────────────────────────────────────
                 let phase = 'idle';   // 'idle' | 'countdown' | 'running' | 'done'
@@ -383,7 +386,8 @@
                 // ─── Audio ────────────────────────────────────────────────────────────────
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-                function beep(freq = 880, durationMs = 120, volume = 0.4) {
+                function beep(freq = 800, durationMs = 400, volume = 0.6) {
+                    if (!soundEnabled) return;
                     // Resume context if suspended (browser autoplay policy)
                     if (audioCtx.state === 'suspended') audioCtx.resume();
                     const osc = audioCtx.createOscillator();
@@ -500,7 +504,7 @@
                                 cdElapsed = autostart * 1000;
                                 phase = 'running';
                                 lastBeepSec = null;
-                                beep(); // GO beep
+                                beep(1100, 800, 0.9); // GO beep
                             }
                         } else if (phase === 'running') {
                             elapsed += delta;
@@ -540,7 +544,7 @@
                     if (phase === 'idle' || phase === 'done') {
                         resetState();
                         phase = autostart > 0 ? 'countdown' : 'running';
-                        if (autostart === 0) beep(); // GO beep when no countdown
+                        if (autostart === 0) beep(1100, 800, 0.9); // GO beep when no countdown
                         startLoop();
                     } else if (!paused && (phase === 'countdown' || phase === 'running')) {
                         // Pause
@@ -611,6 +615,7 @@
                     const url = new URL(window.location.href);
                     url.searchParams.set('duration', duration);
                     url.searchParams.set('autostart', autostart);
+                    url.searchParams.set('sound', soundEnabled ? '1' : '0');
                     window.history.replaceState(null, '', url.toString());
 
                     // Reset timer to idle with new values
@@ -625,8 +630,8 @@
                 // Returns true (and handles the event) when a key is a shared control key.
                 // Returns false when the caller should continue with its own validation.
                 function handleModalKey(e) {
-                    if (e.key === 'Enter') { btnModalSave.click(); return true; }
-                    if (e.key === 'Escape') { closeModal(); return true; }
+                    if (e.key === 'Enter') {btnModalSave.click(); return true;}
+                    if (e.key === 'Escape') {closeModal(); return true;}
                     if (e.metaKey || e.ctrlKey) return true;
                     if (NAV_KEYS.includes(e.key)) return true;
                     return false;
@@ -642,28 +647,28 @@
                 inputDuration.addEventListener('keydown', (e) => {
                     if (handleModalKey(e)) return;
 
-                    if (!/^[0-9:]$/.test(e.key)) { e.preventDefault(); return; }
+                    if (!/^[0-9:]$/.test(e.key)) {e.preventDefault(); return;}
 
                     const next = previewValue(e);
 
                     // At most two colons (HH:MM:SS)
-                    if ((next.match(/:/g) || []).length > 2) { e.preventDefault(); return; }
+                    if ((next.match(/:/g) || []).length > 2) {e.preventDefault(); return;}
 
                     // No consecutive colons, no leading colon
-                    if (/::/.test(next) || next.startsWith(':')) { e.preventDefault(); return; }
+                    if (/::/.test(next) || next.startsWith(':')) {e.preventDefault(); return;}
 
                     // Each colon-separated segment must be at most 2 digits
-                    if (next.split(':').some(s => s.length > 2)) { e.preventDefault(); return; }
+                    if (next.split(':').some(s => s.length > 2)) {e.preventDefault(); return;}
                 });
 
                 // Autostart: non-negative integers only, no leading zeros
                 inputAutostart.addEventListener('keydown', (e) => {
                     if (handleModalKey(e)) return;
 
-                    if (!/^[0-9]$/.test(e.key)) { e.preventDefault(); return; }
+                    if (!/^[0-9]$/.test(e.key)) {e.preventDefault(); return;}
 
                     // Disallow a leading zero followed by more digits (e.g. "07")
-                    if (/^0\d/.test(previewValue(e))) { e.preventDefault(); return; }
+                    if (/^0\d/.test(previewValue(e))) {e.preventDefault(); return;}
                 });
 
                 // ─── Autostart ────────────────────────────────────────────────────────────

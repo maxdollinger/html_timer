@@ -15,6 +15,7 @@ A minimal, single-file countdown/countup timer with no external dependencies. De
 | `duration`  | `60`     | Timer duration in seconds. |
 | `direction` | `down`   | Count direction: `down` (countdown) or `up` (countup). |
 | `autostart` | `0`      | Seconds to wait before the timer starts automatically. Set to `0` to require manual start. |
+| `sound`     | `1`      | Enable (`1`) or disable (`0`) beep sounds. |
 
 ## Controls
 
