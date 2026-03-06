@@ -154,7 +154,8 @@
                 transition: background 0.4s, box-shadow 0.4s;
             }
 
-            #progress-bar.countdown-phase {
+            #progress-bar.countdown-phase,
+            #progress-bar.running-phase.last-seconds {
                 background: var(--accent2);
                 box-shadow: 0 0 8px var(--accent2);
             }
@@ -487,6 +488,7 @@
                         setAllPhaseClasses('running');
                         const isLastSeconds = direction === 'down' && (duration - elapsed / 1000) <= 3;
                         display.classList.toggle('last-seconds', isLastSeconds);
+                        progressBar.classList.toggle('last-seconds', isLastSeconds);
                         btnStart.textContent = paused ? 'Resume' : 'Pause';
                     } else if (phase === 'done') {
                         display.textContent = direction === 'down' ? fmt(0) : fmt(duration);
