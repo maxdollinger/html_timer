@@ -5,7 +5,7 @@ A minimal, single-file countdown/countup timer with no external dependencies. De
 ## Usage
 
 ```html
-<iframe src="timer.html?duration=120&direction=down&autostart=3"></iframe>
+<iframe src="timer.html?duration=120&direction=down&autostart=1&countdown=3"></iframe>
 ```
 
 ## URL Parameters
@@ -14,7 +14,8 @@ A minimal, single-file countdown/countup timer with no external dependencies. De
 |-------------|----------|-------------|
 | `duration`  | `60`     | Timer duration in seconds. |
 | `direction` | `down`   | Count direction: `down` (countdown) or `up` (countup). |
-| `autostart` | `0`      | Seconds to wait before the timer starts automatically. Set to `0` to require manual start. |
+| `autostart` | `0`      | `1` = start the timer automatically on page load. `0` = require manual start. |
+| `countdown` | `0`      | Seconds of pre-timer countdown shown before the timer begins (e.g. `3` shows a 3-2-1 countdown). `0` = no countdown, start immediately. |
 | `sound`     | `1`      | Enable (`1`) or disable (`0`) beep sounds. Only applies when the timer is started manually — autostart via URL param always runs silently because browsers block audio playback on page load without a prior user interaction. |
 
 ## Controls

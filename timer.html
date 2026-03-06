@@ -344,11 +344,12 @@
                     <span class="hint">e.g. 5:00 &nbsp;or&nbsp; 300</span>
                 </div>
                 <div class="field">
-                    <label>Autostart countdown</label>
-                    <input type="text" id="input-autostart" placeholder="seconds  (0 = off)" autocomplete="off"
+                    <label>Countdown</label>
+                    <input type="text" id="input-countdown" placeholder="seconds  (0 = none)" autocomplete="off"
                         spellcheck="false">
-                    <span class="hint">Seconds before timer starts automatically. 0 = off</span>
+                    <span class="hint">Seconds of pre-timer countdown. 0 = start immediately</span>
                 </div>
+
                 <div class="modal-row">
                     <button class="btn secondary" id="btn-modal-cancel">Cancel</button>
                     <button class="btn" id="btn-modal-save">Apply</button>
@@ -373,45 +374,47 @@
 
         <script>
             (function () {
-                // ─── Read URL params ───────────────────────────────────────────────────────
+                // ─── URL params ───────────────────────────────────────────────────────────
                 const params = new URLSearchParams(window.location.search);
                 const direction = (params.get('direction') || 'down').toLowerCase(); // 'up' | 'down'
-                let duration = Math.max(1, parseInt(params.get('duration') || '60', 10)); // seconds
-                let autostart = parseInt(params.get('autostart') || '0', 10);              // seconds; 0 = off
-                let soundEnabled = params.get('sound') === '1';                            // false by default; ?sound=1 enables
+                let duration  = Math.max(1, parseInt(params.get('duration')  || '60', 10)); // seconds
+                let countdown = Math.max(0, parseInt(params.get('countdown') || '0',  10)); // seconds; 0 = no pre-timer countdown
+                const autostart = params.get('autostart') === '1';                          // true = start on load
+                const soundEnabled = params.get('sound') === '1';                           // true = beeps on manual start
 
                 // ─── State ────────────────────────────────────────────────────────────────
-                let phase = 'idle';   // 'idle' | 'countdown' | 'running' | 'done'
+                let phase = 'idle';      // 'idle' | 'countdown' | 'running' | 'done'
                 let paused = false;
-                let elapsed = 0;        // ms
-                let cdElapsed = 0;        // ms for countdown phase
+                let elapsed = 0;         // ms — main timer
+                let cdElapsed = 0;       // ms — pre-timer countdown
                 let lastTick = null;
                 let rafId = null;
-                let lastBeepSec = null; // deduplication: last integer second that triggered a beep
-                let autoStarted = false; // true when started via autostart param — sound is suppressed
+                let lastBeepSec = null;  // dedup: last integer second that triggered a beep
+                let autoStarted = false; // true when started via autostart param — sound suppressed
 
                 // ─── Audio ────────────────────────────────────────────────────────────────
-                // Sound is only played when the timer is started manually (user gesture).
-                // Autostart via URL param suppresses all beeps because browsers block audio
-                // on page load without a prior user interaction.
+                // Autostart suppresses all beeps: browsers block audio on page load without
+                // a prior user interaction.
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-                function beep(freq = 800, durationMs = 400, volume = 0.6) {
+                function beep(freq = 800, ms = 400, volume = 0.6) {
                     if (!soundEnabled || autoStarted) return;
-                    const osc = audioCtx.createOscillator();
+                    const osc  = audioCtx.createOscillator();
                     const gain = audioCtx.createGain();
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
                     gain.gain.setValueAtTime(volume, audioCtx.currentTime);
                     // Soft fade-out to avoid click artefacts
-                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationMs / 1000);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + ms / 1000);
                     osc.connect(gain);
                     gain.connect(audioCtx.destination);
                     osc.start(audioCtx.currentTime);
-                    osc.stop(audioCtx.currentTime + durationMs / 1000);
+                    osc.stop(audioCtx.currentTime + ms / 1000);
                 }
 
-                // Beep once per unique integer-second value in the given window.
+                function beepGo() { beep(1100, 800, 0.9); }
+
+                // Beep once per unique integer-second value in [min, max].
                 function beepIfNew(sec, min = 1, max = 3) {
                     if (sec >= min && sec <= max && sec !== lastBeepSec) {
                         lastBeepSec = sec;
@@ -420,18 +423,18 @@
                 }
 
                 // ─── DOM refs ─────────────────────────────────────────────────────────────
-                const display = document.getElementById('display');
-                const label = document.getElementById('label');
-                const progressBar = document.getElementById('progress-bar');
-                const dirBadge = document.getElementById('direction-badge');
-                const btnStart = document.getElementById('btn-start');
-                const btnReset = document.getElementById('btn-reset');
-                const btnEdit = document.getElementById('btn-edit');
-                const modalBackdrop = document.getElementById('edit-modal-backdrop');
-                const inputDuration = document.getElementById('input-duration');
-                const inputAutostart = document.getElementById('input-autostart');
+                const display      = document.getElementById('display');
+                const label        = document.getElementById('label');
+                const progressBar  = document.getElementById('progress-bar');
+                const dirBadge     = document.getElementById('direction-badge');
+                const btnStart     = document.getElementById('btn-start');
+                const btnReset     = document.getElementById('btn-reset');
+                const btnEdit      = document.getElementById('btn-edit');
+                const modalBackdrop  = document.getElementById('edit-modal-backdrop');
+                const inputDuration  = document.getElementById('input-duration');
+                const inputCountdown = document.getElementById('input-countdown');
                 const btnModalCancel = document.getElementById('btn-modal-cancel');
-                const btnModalSave = document.getElementById('btn-modal-save');
+                const btnModalSave   = document.getElementById('btn-modal-save');
 
                 dirBadge.textContent = direction === 'up' ? '▲  count up' : '▼  count down';
 
@@ -444,7 +447,20 @@
                     if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`;
                     return `${pad(m)}:${pad(s)}`;
                 }
-                function pad(n) {return String(n).padStart(2, '0');}
+                function pad(n) { return String(n).padStart(2, '0'); }
+
+                // Returns the timer value (seconds) to display, accounting for direction.
+                function timerValue() {
+                    return direction === 'down'
+                        ? Math.max(0, duration - elapsed / 1000)
+                        : elapsed / 1000;
+                }
+
+                // Returns progress bar fill percentage, accounting for direction.
+                function progressPct() {
+                    const pct = Math.min(100, (elapsed / (duration * 1000)) * 100);
+                    return direction === 'down' ? 100 - pct : pct;
+                }
 
                 function setPhaseClass(el, p) {
                     el.classList.remove('countdown-phase', 'running-phase', 'done-phase');
@@ -459,41 +475,38 @@
 
                 function resetState() {
                     stopLoop();
-                    phase = 'idle'; elapsed = 0; cdElapsed = 0; paused = false; lastBeepSec = null; autoStarted = false;
+                    phase = 'idle'; elapsed = 0; cdElapsed = 0; paused = false;
+                    lastBeepSec = null; autoStarted = false;
                 }
 
                 function render() {
                     if (phase === 'idle') {
-                        display.textContent = fmt(direction === 'down' ? duration : 0);
+                        display.textContent = fmt(timerValue());
                         label.textContent = 'Ready';
-                        progressBar.style.width = direction === 'down' ? '100%' : '0%';
+                        progressBar.style.width = progressPct() + '%';
                         setAllPhaseClasses('');
                         btnStart.textContent = 'Start';
                     } else if (phase === 'countdown') {
-                        const remaining = Math.max(0, (autostart * 1000 - cdElapsed) / 1000);
+                        const cdTotal = countdown * 1000;
+                        const remaining = Math.max(0, (cdTotal - cdElapsed) / 1000);
                         display.textContent = fmt(remaining);
                         label.textContent = 'Starting in';
-                        progressBar.style.width = ((autostart * 1000 - cdElapsed) / (autostart * 1000) * 100).toFixed(2) + '%';
+                        progressBar.style.width = ((cdTotal - cdElapsed) / cdTotal * 100).toFixed(2) + '%';
                         setAllPhaseClasses('countdown');
                         btnStart.textContent = paused ? 'Resume' : 'Pause';
                     } else if (phase === 'running') {
-                        const elapsedSecs = elapsed / 1000;
-                        const timerDisplay = direction === 'down'
-                            ? Math.max(0, duration - elapsedSecs)
-                            : elapsedSecs;
-                        display.textContent = fmt(timerDisplay);
+                        display.textContent = fmt(timerValue());
                         label.textContent = direction === 'up' ? 'Elapsed' : 'Remaining';
-                        const pct = Math.min(100, (elapsed / (duration * 1000)) * 100);
-                        progressBar.style.width = (direction === 'down' ? 100 - pct : pct).toFixed(2) + '%';
+                        progressBar.style.width = progressPct().toFixed(2) + '%';
                         setAllPhaseClasses('running');
-                        const isLastSeconds = direction === 'down' && (duration - elapsed / 1000) <= 3;
+                        const isLastSeconds = direction === 'down' && timerValue() <= 3;
                         display.classList.toggle('last-seconds', isLastSeconds);
                         progressBar.classList.toggle('last-seconds', isLastSeconds);
                         btnStart.textContent = paused ? 'Resume' : 'Pause';
                     } else if (phase === 'done') {
-                        display.textContent = direction === 'down' ? fmt(0) : fmt(duration);
+                        display.textContent = fmt(timerValue());
                         label.textContent = 'Done';
-                        progressBar.style.width = direction === 'down' ? '0%' : '100%';
+                        progressBar.style.width = progressPct() + '%';
                         setPhaseClass(display, 'done');
                         setPhaseClass(label, 'running');
                         setPhaseClass(progressBar, 'running');
@@ -507,26 +520,19 @@
                         const delta = ts - lastTick;
                         if (phase === 'countdown') {
                             cdElapsed += delta;
-
-                            // Beep on 3, 2, 1 of the autostart countdown
-                            beepIfNew(Math.ceil((autostart * 1000 - cdElapsed) / 1000));
-
-                            if (cdElapsed >= autostart * 1000) {
-                                cdElapsed = autostart * 1000;
+                            beepIfNew(Math.ceil((countdown * 1000 - cdElapsed) / 1000));
+                            if (cdElapsed >= countdown * 1000) {
                                 phase = 'running';
                                 lastBeepSec = null;
-                                beep(1100, 800, 0.9); // GO beep
+                                beepGo();
                             }
                         } else if (phase === 'running') {
                             elapsed += delta;
-
                             if (elapsed >= duration * 1000) {
                                 elapsed = duration * 1000;
                                 phase = 'done';
-                                beep(1100, 800, 0.9); // final "done" beep
-                                cancelAnimationFrame(rafId);
-                                rafId = null;
-                                lastTick = null;
+                                beepGo();
+                                stopLoop();
                                 render();
                                 return;
                             }
@@ -544,7 +550,7 @@
                 }
 
                 function stopLoop() {
-                    if (rafId) {cancelAnimationFrame(rafId); rafId = null;}
+                    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
                     lastTick = null;
                 }
 
@@ -552,18 +558,17 @@
                 btnStart.addEventListener('click', () => {
                     if (phase === 'idle' || phase === 'done') {
                         resetState();
-                        phase = autostart > 0 ? 'countdown' : 'running';
-                        if (autostart === 0) beep(1100, 800, 0.9); // GO beep when no countdown
+                        phase = countdown > 0 ? 'countdown' : 'running';
+                        if (countdown === 0) beepGo();
                         startLoop();
-                    } else if (!paused && (phase === 'countdown' || phase === 'running')) {
-                        // Pause
+                    } else if (paused) {
+                        paused = false;
+                        startLoop();
+                    } else {
+                        // Pause (phase is 'countdown' or 'running')
                         stopLoop();
                         paused = true;
                         render();
-                    } else if (paused) {
-                        // Resume
-                        paused = false;
-                        startLoop();
                     }
                 });
 
@@ -575,41 +580,32 @@
                 // ─── Edit modal ───────────────────────────────────────────────────────────
                 function parseDurationInput(val) {
                     val = val.trim();
-                    // Accept MM:SS or HH:MM:SS
                     const colonMatch = val.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
                     if (colonMatch) {
                         const a = parseInt(colonMatch[1], 10);
                         const b = parseInt(colonMatch[2], 10);
                         const c = colonMatch[3] !== undefined ? parseInt(colonMatch[3], 10) : null;
-                        if (c !== null) return a * 3600 + b * 60 + c; // HH:MM:SS
-                        return a * 60 + b;                             // MM:SS
+                        return c !== null ? a * 3600 + b * 60 + c : a * 60 + b;
                     }
                     const n = parseInt(val, 10);
                     return isNaN(n) ? null : n;
                 }
 
+                function closeModal() { modalBackdrop.classList.remove('open'); }
+
                 btnEdit.addEventListener('click', () => {
                     inputDuration.value = fmt(duration);
-                    inputAutostart.value = autostart > 0 ? String(autostart) : '0';
+                    inputCountdown.value = String(countdown);
                     modalBackdrop.classList.add('open');
                     inputDuration.focus();
                     inputDuration.select();
                 });
 
-                function closeModal() {
-                    modalBackdrop.classList.remove('open');
-                }
-
                 btnModalCancel.addEventListener('click', closeModal);
-
-                modalBackdrop.addEventListener('click', (e) => {
-                    if (e.target === modalBackdrop) closeModal();
-                });
+                modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeModal(); });
 
                 btnModalSave.addEventListener('click', () => {
                     const newDuration = parseDurationInput(inputDuration.value);
-                    const newAutostart = parseInt(inputAutostart.value.trim(), 10);
-
                     if (newDuration === null || newDuration < 1) {
                         inputDuration.style.borderColor = 'var(--accent2)';
                         inputDuration.focus();
@@ -617,17 +613,16 @@
                     }
                     inputDuration.style.borderColor = '';
 
-                    duration = newDuration;
-                    autostart = isNaN(newAutostart) || newAutostart < 0 ? 0 : newAutostart;
+                    const newCountdown = parseInt(inputCountdown.value.trim(), 10);
+                    duration  = newDuration;
+                    countdown = isNaN(newCountdown) || newCountdown < 0 ? 0 : newCountdown;
 
-                    // Reflect in URL without reloading
                     const url = new URL(window.location.href);
-                    url.searchParams.set('duration', duration);
-                    url.searchParams.set('autostart', autostart);
+                    url.searchParams.set('duration',  duration);
+                    url.searchParams.set('countdown', countdown);
                     url.searchParams.set('sound', soundEnabled ? '1' : '0');
                     window.history.replaceState(null, '', url.toString());
 
-                    // Reset timer to idle with new values
                     resetState();
                     closeModal();
                     render();
@@ -636,57 +631,40 @@
                 // ─── Per-key input validation ─────────────────────────────────────────────
                 const NAV_KEYS = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'];
 
-                // Returns true (and handles the event) when a key is a shared control key.
-                // Returns false when the caller should continue with its own validation.
                 function handleModalKey(e) {
-                    if (e.key === 'Enter') {btnModalSave.click(); return true;}
-                    if (e.key === 'Escape') {closeModal(); return true;}
-                    if (e.metaKey || e.ctrlKey) return true;
-                    if (NAV_KEYS.includes(e.key)) return true;
-                    return false;
+                    if (e.key === 'Enter')  { btnModalSave.click(); return true; }
+                    if (e.key === 'Escape') { closeModal();         return true; }
+                    return e.metaKey || e.ctrlKey || NAV_KEYS.includes(e.key);
                 }
 
-                // Helper: simulate the resulting value after inserting e.key at the cursor.
                 function previewValue(e) {
                     const el = e.target;
                     return el.value.slice(0, el.selectionStart) + e.key + el.value.slice(el.selectionEnd);
                 }
 
-                // Duration: digits and colons only, at most two colons, each segment ≤ 2 digits
+                // Duration: digits and colons only, ≤ 2 colons, each segment ≤ 2 digits
                 inputDuration.addEventListener('keydown', (e) => {
                     if (handleModalKey(e)) return;
-
-                    if (!/^[0-9:]$/.test(e.key)) {e.preventDefault(); return;}
-
+                    if (!/^[0-9:]$/.test(e.key)) { e.preventDefault(); return; }
                     const next = previewValue(e);
-
-                    // At most two colons (HH:MM:SS)
-                    if ((next.match(/:/g) || []).length > 2) {e.preventDefault(); return;}
-
-                    // No consecutive colons, no leading colon
-                    if (/::/.test(next) || next.startsWith(':')) {e.preventDefault(); return;}
-
-                    // Each colon-separated segment must be at most 2 digits
-                    if (next.split(':').some(s => s.length > 2)) {e.preventDefault(); return;}
+                    if ((next.match(/:/g) || []).length > 2)          { e.preventDefault(); return; }
+                    if (/::/.test(next) || next.startsWith(':'))       { e.preventDefault(); return; }
+                    if (next.split(':').some(s => s.length > 2))       { e.preventDefault(); return; }
                 });
 
-                // Autostart: non-negative integers only, no leading zeros
-                inputAutostart.addEventListener('keydown', (e) => {
+                // Countdown: non-negative integer, no leading zeros
+                inputCountdown.addEventListener('keydown', (e) => {
                     if (handleModalKey(e)) return;
-
-                    if (!/^[0-9]$/.test(e.key)) {e.preventDefault(); return;}
-
-                    // Disallow a leading zero followed by more digits (e.g. "07")
-                    if (/^0\d/.test(previewValue(e))) {e.preventDefault(); return;}
+                    if (!/^[0-9]$/.test(e.key))             { e.preventDefault(); return; }
+                    if (/^0\d/.test(previewValue(e)))        { e.preventDefault(); return; }
                 });
 
-                // ─── Autostart ────────────────────────────────────────────────────────────
-                if (autostart > 0) {
-                    resetState();
+                // ─── Bootstrap ────────────────────────────────────────────────────────────
+                if (autostart) {
                     autoStarted = true;
                     render();
                     setTimeout(() => {
-                        phase = 'countdown';
+                        phase = countdown > 0 ? 'countdown' : 'running';
                         startLoop();
                     }, 100);
                 } else {
