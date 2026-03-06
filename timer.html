@@ -77,7 +77,6 @@
             }
 
             #label {
-                font-family: 'Rajdhani', sans-serif;
                 font-weight: 300;
                 font-size: 13px;
                 letter-spacing: 4px;
@@ -170,7 +169,6 @@
             }
 
             .btn {
-                font-family: 'Rajdhani', sans-serif;
                 font-weight: 500;
                 font-size: 12px;
                 letter-spacing: 3px;
@@ -265,7 +263,6 @@
             }
 
             #edit-modal h2 {
-                font-family: 'Rajdhani', sans-serif;
                 font-weight: 300;
                 font-size: 13px;
                 letter-spacing: 4px;
@@ -281,7 +278,6 @@
             }
 
             .field label {
-                font-family: 'Rajdhani', sans-serif;
                 font-size: 13px;
                 letter-spacing: 3px;
                 text-transform: uppercase;
@@ -382,6 +378,34 @@
                 let cdElapsed = 0;        // ms for countdown phase
                 let lastTick = null;
                 let rafId = null;
+                let lastBeepSec = null; // deduplication: last integer second that triggered a beep
+
+                // ─── Audio ────────────────────────────────────────────────────────────────
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+                function beep(freq = 880, durationMs = 120, volume = 0.4) {
+                    // Resume context if suspended (browser autoplay policy)
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                    // Soft fade-out to avoid click artefacts
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + durationMs / 1000);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(audioCtx.currentTime);
+                    osc.stop(audioCtx.currentTime + durationMs / 1000);
+                }
+
+                // Beep once per unique integer-second value in the 1–3 window.
+                function beepIfNew(sec) {
+                    if (sec >= 1 && sec <= 3 && sec !== lastBeepSec) {
+                        lastBeepSec = sec;
+                        beep();
+                    }
+                }
 
                 // ─── DOM refs ─────────────────────────────────────────────────────────────
                 const display = document.getElementById('display');
@@ -421,12 +445,16 @@
                     setPhaseClass(progressBar, p);
                 }
 
+                function resetState() {
+                    stopLoop();
+                    phase = 'idle'; elapsed = 0; cdElapsed = 0; paused = false; lastBeepSec = null;
+                }
+
                 function render() {
                     if (phase === 'idle') {
                         display.textContent = fmt(direction === 'down' ? duration : 0);
                         label.textContent = 'Ready';
                         progressBar.style.width = direction === 'down' ? '100%' : '0%';
-                        progressBar.style.background = '';
                         setAllPhaseClasses('');
                         btnStart.textContent = 'Start';
                     } else if (phase === 'countdown') {
@@ -464,12 +492,22 @@
                         const delta = ts - lastTick;
                         if (phase === 'countdown') {
                             cdElapsed += delta;
+
+                            // Beep on 3, 2, 1 of the autostart countdown
+                            beepIfNew(Math.ceil((autostart * 1000 - cdElapsed) / 1000));
+
                             if (cdElapsed >= autostart * 1000) {
                                 cdElapsed = autostart * 1000;
                                 phase = 'running';
+                                lastBeepSec = null;
+                                beep(); // GO beep
                             }
                         } else if (phase === 'running') {
                             elapsed += delta;
+
+                            // Beep on last 3, 2, 1 seconds for countdown-direction timers
+                            if (direction === 'down') beepIfNew(Math.ceil((duration * 1000 - elapsed) / 1000));
+
                             if (elapsed >= duration * 1000) {
                                 elapsed = duration * 1000;
                                 phase = 'done';
@@ -500,8 +538,9 @@
                 // ─── Controls ─────────────────────────────────────────────────────────────
                 btnStart.addEventListener('click', () => {
                     if (phase === 'idle' || phase === 'done') {
-                        elapsed = 0; cdElapsed = 0; paused = false;
+                        resetState();
                         phase = autostart > 0 ? 'countdown' : 'running';
+                        if (autostart === 0) beep(); // GO beep when no countdown
                         startLoop();
                     } else if (!paused && (phase === 'countdown' || phase === 'running')) {
                         // Pause
@@ -516,8 +555,7 @@
                 });
 
                 btnReset.addEventListener('click', () => {
-                    stopLoop();
-                    phase = 'idle'; elapsed = 0; cdElapsed = 0; paused = false;
+                    resetState();
                     render();
                 });
 
@@ -576,8 +614,7 @@
                     window.history.replaceState(null, '', url.toString());
 
                     // Reset timer to idle with new values
-                    stopLoop();
-                    phase = 'idle'; elapsed = 0; cdElapsed = 0; paused = false;
+                    resetState();
                     closeModal();
                     render();
                 });
