@@ -8,14 +8,6 @@
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500&display=swap');
 
-            *,
-            *::before,
-            *::after {
-                box-sizing: border-box;
-                margin: 0;
-                padding: 0;
-            }
-
             :root {
                 --bg: #0a0a0f;
                 --panel: #10101a;
@@ -42,15 +34,21 @@
 
             #timer-shell {
                 position: relative;
-                width: 320px;
+                width: fit-content;
                 background: var(--panel);
                 border: 1px solid var(--border);
                 border-radius: 4px;
-                padding: 36px 32px 28px;
+                padding: 10px 10px 10px;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 24px;
+            }
+
+            #timer-main {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 0;
             }
 
             /* Corner accents */
@@ -76,31 +74,12 @@
                 border-width: 0 2px 2px 0;
             }
 
-            #label {
-                font-weight: 300;
-                font-size: 13px;
-                letter-spacing: 4px;
-                text-transform: uppercase;
-                color: #b0b0d0;
-                margin-bottom: 20px;
-                transition: color 0.4s;
-            }
-
-            #label.countdown-phase {
-                color: var(--accent2);
-            }
-
-            #label.running-phase {
-                color: var(--accent);
-            }
-
             #display {
                 font-family: 'Share Tech Mono', monospace;
                 font-size: 64px;
                 color: var(--text);
                 letter-spacing: 2px;
                 line-height: 1;
-                margin-bottom: 8px;
                 transition: color 0.4s, text-shadow 0.4s;
             }
 
@@ -141,7 +120,7 @@
                 width: 100%;
                 height: 2px;
                 background: var(--border);
-                margin: 20px 0 8px;
+                margin: 2px;
                 position: relative;
                 overflow: hidden;
             }
@@ -165,13 +144,13 @@
                 letter-spacing: 3px;
                 color: #b0b0d0;
                 text-transform: uppercase;
-                margin-bottom: 24px;
+                padding: 2px;
             }
 
             #controls {
                 display: flex;
+                flex-direction: column;
                 gap: 10px;
-                margin-top: 4px;
             }
 
             .btn {
@@ -359,12 +338,13 @@
 
         <div id="timer-shell">
             <div class="scanlines"></div>
-            <div id="label">Initializing</div>
-            <div id="display">--:--</div>
-            <div id="progress-bar-wrap">
-                <div id="progress-bar"></div>
+            <div id="timer-main">
+                <div id="display">--:--</div>
+                <div id="progress-bar-wrap">
+                    <div id="progress-bar"></div>
+                </div>
+                <div id="direction-badge"></div>
             </div>
-            <div id="direction-badge"></div>
             <div id="controls">
                 <button class="btn" id="btn-start">Start</button>
                 <button class="btn secondary" id="btn-reset">Reset</button>
@@ -377,8 +357,8 @@
                 // ─── URL params ───────────────────────────────────────────────────────────
                 const params = new URLSearchParams(window.location.search);
                 const direction = (params.get('direction') || 'down').toLowerCase(); // 'up' | 'down'
-                let duration  = Math.max(1, parseInt(params.get('duration')  || '60', 10)); // seconds
-                let countdown = Math.max(0, parseInt(params.get('countdown') || '0',  10)); // seconds; 0 = no pre-timer countdown
+                let duration = Math.max(1, parseInt(params.get('duration') || '60', 10)); // seconds
+                let countdown = Math.max(0, parseInt(params.get('countdown') || '0', 10)); // seconds; 0 = no pre-timer countdown
                 const autostart = params.get('autostart') === '1';                          // true = start on load
                 const soundEnabled = params.get('sound') === '1';                           // true = beeps on manual start
 
@@ -399,7 +379,7 @@
 
                 function beep(freq = 800, ms = 400, volume = 0.6) {
                     if (!soundEnabled || autoStarted) return;
-                    const osc  = audioCtx.createOscillator();
+                    const osc = audioCtx.createOscillator();
                     const gain = audioCtx.createGain();
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
@@ -412,7 +392,7 @@
                     osc.stop(audioCtx.currentTime + ms / 1000);
                 }
 
-                function beepGo() { beep(1100, 800, 0.9); }
+                function beepGo() {beep(1100, 800, 0.9);}
 
                 // Beep once per unique integer-second value in [min, max].
                 function beepIfNew(sec, min = 1, max = 3) {
@@ -423,18 +403,17 @@
                 }
 
                 // ─── DOM refs ─────────────────────────────────────────────────────────────
-                const display      = document.getElementById('display');
-                const label        = document.getElementById('label');
-                const progressBar  = document.getElementById('progress-bar');
-                const dirBadge     = document.getElementById('direction-badge');
-                const btnStart     = document.getElementById('btn-start');
-                const btnReset     = document.getElementById('btn-reset');
-                const btnEdit      = document.getElementById('btn-edit');
-                const modalBackdrop  = document.getElementById('edit-modal-backdrop');
-                const inputDuration  = document.getElementById('input-duration');
+                const display = document.getElementById('display');
+                const progressBar = document.getElementById('progress-bar');
+                const dirBadge = document.getElementById('direction-badge');
+                const btnStart = document.getElementById('btn-start');
+                const btnReset = document.getElementById('btn-reset');
+                const btnEdit = document.getElementById('btn-edit');
+                const modalBackdrop = document.getElementById('edit-modal-backdrop');
+                const inputDuration = document.getElementById('input-duration');
                 const inputCountdown = document.getElementById('input-countdown');
                 const btnModalCancel = document.getElementById('btn-modal-cancel');
-                const btnModalSave   = document.getElementById('btn-modal-save');
+                const btnModalSave = document.getElementById('btn-modal-save');
 
                 dirBadge.textContent = direction === 'up' ? '▲  count up' : '▼  count down';
 
@@ -447,7 +426,7 @@
                     if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`;
                     return `${pad(m)}:${pad(s)}`;
                 }
-                function pad(n) { return String(n).padStart(2, '0'); }
+                function pad(n) {return String(n).padStart(2, '0');}
 
                 // Returns the timer value (seconds) to display, accounting for direction.
                 function timerValue() {
@@ -469,7 +448,6 @@
 
                 function setAllPhaseClasses(p) {
                     setPhaseClass(display, p);
-                    setPhaseClass(label, p);
                     setPhaseClass(progressBar, p);
                 }
 
@@ -482,7 +460,6 @@
                 function render() {
                     if (phase === 'idle') {
                         display.textContent = fmt(timerValue());
-                        label.textContent = 'Ready';
                         progressBar.style.width = progressPct() + '%';
                         setAllPhaseClasses('');
                         btnStart.textContent = 'Start';
@@ -490,13 +467,11 @@
                         const cdTotal = countdown * 1000;
                         const remaining = Math.max(0, (cdTotal - cdElapsed) / 1000);
                         display.textContent = fmt(remaining);
-                        label.textContent = 'Starting in';
                         progressBar.style.width = ((cdTotal - cdElapsed) / cdTotal * 100).toFixed(2) + '%';
                         setAllPhaseClasses('countdown');
                         btnStart.textContent = paused ? 'Resume' : 'Pause';
                     } else if (phase === 'running') {
                         display.textContent = fmt(timerValue());
-                        label.textContent = direction === 'up' ? 'Elapsed' : 'Remaining';
                         progressBar.style.width = progressPct().toFixed(2) + '%';
                         setAllPhaseClasses('running');
                         const isLastSeconds = direction === 'down' && timerValue() <= 3;
@@ -505,10 +480,8 @@
                         btnStart.textContent = paused ? 'Resume' : 'Pause';
                     } else if (phase === 'done') {
                         display.textContent = fmt(timerValue());
-                        label.textContent = 'Done';
                         progressBar.style.width = progressPct() + '%';
                         setPhaseClass(display, 'done');
-                        setPhaseClass(label, 'running');
                         setPhaseClass(progressBar, 'running');
                         btnStart.textContent = 'Restart';
                     }
@@ -550,7 +523,7 @@
                 }
 
                 function stopLoop() {
-                    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+                    if (rafId) {cancelAnimationFrame(rafId); rafId = null;}
                     lastTick = null;
                 }
 
@@ -591,7 +564,7 @@
                     return isNaN(n) ? null : n;
                 }
 
-                function closeModal() { modalBackdrop.classList.remove('open'); }
+                function closeModal() {modalBackdrop.classList.remove('open');}
 
                 btnEdit.addEventListener('click', () => {
                     inputDuration.value = fmt(duration);
@@ -602,7 +575,7 @@
                 });
 
                 btnModalCancel.addEventListener('click', closeModal);
-                modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeModal(); });
+                modalBackdrop.addEventListener('click', (e) => {if (e.target === modalBackdrop) closeModal();});
 
                 btnModalSave.addEventListener('click', () => {
                     const newDuration = parseDurationInput(inputDuration.value);
@@ -614,11 +587,11 @@
                     inputDuration.style.borderColor = '';
 
                     const newCountdown = parseInt(inputCountdown.value.trim(), 10);
-                    duration  = newDuration;
+                    duration = newDuration;
                     countdown = isNaN(newCountdown) || newCountdown < 0 ? 0 : newCountdown;
 
                     const url = new URL(window.location.href);
-                    url.searchParams.set('duration',  duration);
+                    url.searchParams.set('duration', duration);
                     url.searchParams.set('countdown', countdown);
                     url.searchParams.set('sound', soundEnabled ? '1' : '0');
                     window.history.replaceState(null, '', url.toString());
@@ -632,8 +605,8 @@
                 const NAV_KEYS = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'];
 
                 function handleModalKey(e) {
-                    if (e.key === 'Enter')  { btnModalSave.click(); return true; }
-                    if (e.key === 'Escape') { closeModal();         return true; }
+                    if (e.key === 'Enter') {btnModalSave.click(); return true;}
+                    if (e.key === 'Escape') {closeModal(); return true;}
                     return e.metaKey || e.ctrlKey || NAV_KEYS.includes(e.key);
                 }
 
@@ -645,18 +618,18 @@
                 // Duration: digits and colons only, ≤ 2 colons, each segment ≤ 2 digits
                 inputDuration.addEventListener('keydown', (e) => {
                     if (handleModalKey(e)) return;
-                    if (!/^[0-9:]$/.test(e.key)) { e.preventDefault(); return; }
+                    if (!/^[0-9:]$/.test(e.key)) {e.preventDefault(); return;}
                     const next = previewValue(e);
-                    if ((next.match(/:/g) || []).length > 2)          { e.preventDefault(); return; }
-                    if (/::/.test(next) || next.startsWith(':'))       { e.preventDefault(); return; }
-                    if (next.split(':').some(s => s.length > 2))       { e.preventDefault(); return; }
+                    if ((next.match(/:/g) || []).length > 2) {e.preventDefault(); return;}
+                    if (/::/.test(next) || next.startsWith(':')) {e.preventDefault(); return;}
+                    if (next.includes(':') && next.split(':').some(s => s.length > 2)) {e.preventDefault(); return;}
                 });
 
                 // Countdown: non-negative integer, no leading zeros
                 inputCountdown.addEventListener('keydown', (e) => {
                     if (handleModalKey(e)) return;
-                    if (!/^[0-9]$/.test(e.key))             { e.preventDefault(); return; }
-                    if (/^0\d/.test(previewValue(e)))        { e.preventDefault(); return; }
+                    if (!/^[0-9]$/.test(e.key)) {e.preventDefault(); return;}
+                    if (/^0\d/.test(previewValue(e))) {e.preventDefault(); return;}
                 });
 
                 // ─── Bootstrap ────────────────────────────────────────────────────────────
