@@ -51,6 +51,11 @@
                 align-items: center;
             }
 
+            #timer-main[hidden],
+            #controls[hidden] {
+                display: none;
+            }
+
             /* Corner accents */
             #timer-shell::before,
             #timer-shell::after {
@@ -197,144 +202,53 @@
                 z-index: 10;
             }
 
-            /* Edit modal */
-            #edit-modal-backdrop {
+            /* Inline edit row */
+            #edit-row {
                 display: none;
-                position: fixed;
-                inset: 0;
-                background: rgba(0, 0, 0, 0.72);
-                align-items: center;
-                justify-content: center;
-                z-index: 100;
-            }
-
-            #edit-modal-backdrop.open {
-                display: flex;
-            }
-
-            #edit-modal {
-                position: relative;
-                background: var(--panel);
-                border: 1px solid var(--border);
-                border-radius: 4px;
-                padding: 32px 28px 24px;
-                width: 300px;
-                display: flex;
-                flex-direction: column;
-                gap: 20px;
-            }
-
-            #edit-modal::before,
-            #edit-modal::after {
-                content: '';
-                position: absolute;
-                width: 12px;
-                height: 12px;
-                border-color: var(--accent);
-                border-style: solid;
-            }
-
-            #edit-modal::before {
-                top: -1px;
-                left: -1px;
-                border-width: 2px 0 0 2px;
-            }
-
-            #edit-modal::after {
-                bottom: -1px;
-                right: -1px;
-                border-width: 0 2px 2px 0;
-            }
-
-            #edit-modal h2 {
-                font-weight: 300;
-                font-size: 13px;
-                letter-spacing: 4px;
-                text-transform: uppercase;
-                color: #b0b0d0;
-                margin: 0;
-            }
-
-            .field {
-                display: flex;
                 flex-direction: column;
                 gap: 6px;
+                width: 100%;
             }
 
-            .field label {
-                font-size: 13px;
-                letter-spacing: 3px;
-                text-transform: uppercase;
-                color: #b0b0d0;
+            #edit-row:not([hidden]) {
+                display: flex;
             }
 
-            .field input {
+            #edit-row-inputs {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            #edit-row-inputs input {
                 font-family: 'Share Tech Mono', monospace;
-                font-size: 22px;
+                font-size: 12px;
                 background: var(--bg);
                 border: 1px solid var(--border);
                 border-radius: 2px;
                 color: var(--text);
-                padding: 8px 12px;
+                padding: 7px 10px;
                 outline: none;
-                width: 100%;
+                flex: 1;
+                min-width: 0;
                 transition: border-color 0.2s, box-shadow 0.2s;
+                letter-spacing: 1px;
             }
 
-            .field input:focus {
+            #edit-row-inputs input:focus {
                 border-color: var(--accent);
                 box-shadow: var(--glow);
             }
 
-            .field .hint {
-                font-size: 11px;
-                letter-spacing: 1px;
-                color: #b0b0d0;
-                opacity: 0.8;
-            }
-
-            .modal-row {
+            #edit-row-actions {
                 display: flex;
-                gap: 10px;
-                justify-content: flex-end;
-            }
-
-            .field-row {
-                display: flex;
-                gap: 12px;
-            }
-
-            .field-row .field {
-                flex: 1;
+                gap: 8px;
+                justify-content: center;
             }
         </style>
     </head>
 
     <body>
-        <!-- Edit modal -->
-        <div id="edit-modal-backdrop">
-            <div id="edit-modal">
-                <h2>Timer Settings</h2>
-                <div class="field">
-                    <label>Duration</label>
-                    <input type="text" id="input-duration" placeholder="MM:SS or seconds" autocomplete="off"
-                        spellcheck="false">
-                    <span class="hint">e.g. 5:00 &nbsp;or&nbsp; 300</span>
-                </div>
-                <div class="field">
-                    <label>Countdown</label>
-                    <input type="text" id="input-countdown" placeholder="seconds  (0 = none)" autocomplete="off"
-                        spellcheck="false">
-                    <span class="hint">Seconds of pre-timer countdown. 0 = start immediately</span>
-                </div>
-
-                <div class="modal-row">
-                    <button class="btn secondary" id="btn-modal-cancel">Cancel</button>
-                    <button class="btn" id="btn-modal-save">Apply</button>
-                </div>
-            </div>
-        </div>
-
         <div id="timer-shell">
             <div class="scanlines"></div>
             <div id="timer-main">
@@ -348,6 +262,18 @@
                 <button class="btn" id="btn-start">Start</button>
                 <button class="btn secondary" id="btn-reset">Reset</button>
                 <button class="btn secondary" id="btn-edit">Edit</button>
+            </div>
+            <div id="edit-row" hidden>
+                <div id="edit-row-inputs">
+                    <input type="text" id="input-duration" placeholder="MM:SS or s" autocomplete="off"
+                        spellcheck="false">
+                    <input type="text" id="input-countdown" placeholder="0 = none" autocomplete="off"
+                        spellcheck="false">
+                </div>
+                <div id="edit-row-actions">
+                    <button class="btn secondary" id="btn-edit-cancel">✕</button>
+                    <button class="btn" id="btn-edit-save">✓</button>
+                </div>
             </div>
         </div>
 
@@ -408,11 +334,13 @@
                 const btnStart = document.getElementById('btn-start');
                 const btnReset = document.getElementById('btn-reset');
                 const btnEdit = document.getElementById('btn-edit');
-                const modalBackdrop = document.getElementById('edit-modal-backdrop');
+                const timerMain = document.getElementById('timer-main');
+                const controls = document.getElementById('controls');
+                const editRow = document.getElementById('edit-row');
                 const inputDuration = document.getElementById('input-duration');
                 const inputCountdown = document.getElementById('input-countdown');
-                const btnModalCancel = document.getElementById('btn-modal-cancel');
-                const btnModalSave = document.getElementById('btn-modal-save');
+                const btnEditCancel = document.getElementById('btn-edit-cancel');
+                const btnEditSave = document.getElementById('btn-edit-save');
 
                 dirBadge.textContent = direction === 'up' ? '▲  count up' : '▼  count down';
 
@@ -549,7 +477,7 @@
                     render();
                 });
 
-                // ─── Edit modal ───────────────────────────────────────────────────────────
+                // ─── Inline edit row ──────────────────────────────────────────────────────
                 function parseDurationInput(val) {
                     val = val.trim();
                     const colonMatch = val.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
@@ -563,20 +491,26 @@
                     return isNaN(n) ? null : n;
                 }
 
-                function closeModal() {modalBackdrop.classList.remove('open');}
-
-                btnEdit.addEventListener('click', () => {
+                function openEditRow() {
                     inputDuration.value = fmt(duration);
                     inputCountdown.value = String(countdown);
-                    modalBackdrop.classList.add('open');
+                    timerMain.hidden = true;
+                    controls.hidden = true;
+                    editRow.hidden = false;
                     inputDuration.focus();
                     inputDuration.select();
-                });
+                }
 
-                btnModalCancel.addEventListener('click', closeModal);
-                modalBackdrop.addEventListener('click', (e) => {if (e.target === modalBackdrop) closeModal();});
+                function closeEditRow() {
+                    editRow.hidden = true;
+                    timerMain.hidden = false;
+                    controls.hidden = false;
+                }
 
-                btnModalSave.addEventListener('click', () => {
+                btnEdit.addEventListener('click', openEditRow);
+                btnEditCancel.addEventListener('click', closeEditRow);
+
+                btnEditSave.addEventListener('click', () => {
                     const newDuration = parseDurationInput(inputDuration.value);
                     if (newDuration === null || newDuration < 1) {
                         inputDuration.style.borderColor = 'var(--accent2)';
@@ -596,16 +530,16 @@
                     window.history.replaceState(null, '', url.toString());
 
                     resetState();
-                    closeModal();
+                    closeEditRow();
                     render();
                 });
 
                 // ─── Per-key input validation ─────────────────────────────────────────────
                 const NAV_KEYS = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Tab'];
 
-                function handleModalKey(e) {
-                    if (e.key === 'Enter') {btnModalSave.click(); return true;}
-                    if (e.key === 'Escape') {closeModal(); return true;}
+                function handleEditKey(e) {
+                    if (e.key === 'Enter') {btnEditSave.click(); return true;}
+                    if (e.key === 'Escape') {closeEditRow(); return true;}
                     return e.metaKey || e.ctrlKey || NAV_KEYS.includes(e.key);
                 }
 
@@ -616,7 +550,7 @@
 
                 // Duration: digits and colons only, ≤ 2 colons, each segment ≤ 2 digits
                 inputDuration.addEventListener('keydown', (e) => {
-                    if (handleModalKey(e)) return;
+                    if (handleEditKey(e)) return;
                     if (!/^[0-9:]$/.test(e.key)) {e.preventDefault(); return;}
                     const next = previewValue(e);
                     if ((next.match(/:/g) || []).length > 2) {e.preventDefault(); return;}
@@ -626,7 +560,7 @@
 
                 // Countdown: non-negative integer, no leading zeros
                 inputCountdown.addEventListener('keydown', (e) => {
-                    if (handleModalKey(e)) return;
+                    if (handleEditKey(e)) return;
                     if (!/^[0-9]$/.test(e.key)) {e.preventDefault(); return;}
                     if (/^0\d/.test(previewValue(e))) {e.preventDefault(); return;}
                 });
